@@ -2,13 +2,12 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import math
 
 st.set_page_config(page_title="WrapTime Lite", page_icon="🎬")
 
-# 1. CONEXIÓN
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 2. MENÚ LATERAL
 st.sidebar.title("Menú WrapTime")
 opcion = st.sidebar.radio("Ir a:", ["Fichar Jornada", "Mi Historial", "Configurar Proyecto"])
 
@@ -19,13 +18,22 @@ if opcion == "Configurar Proyecto":
     
     with st.form("nuevo_proyecto"):
         nombre_p = st.text_input("Nombre del Proyecto")
+        fecha_inicio_rodaje = st.date_input("Fecha Inicio Rodaje (Lunes de la S1)", datetime.now())
         h_jornada = st.number_input("Horas jornada base", value=8)
         t_comida = st.text_input("Tiempo comida", value="1 hora")
         descanso = st.radio("¿Descanso incluido?", ["Sí", "No"])
         
         if st.form_submit_button("Guardar Proyecto"):
             if nombre_p:
-                nuevo_p = pd.DataFrame([{"ID_Usuario": "User1", "Proyecto": nombre_p, "Horas_Jornada": h_jornada, "Tiempo_Comida": t_comida, "Descanso_Incluido": descanso, "Estado": "Activo"}])
+                nuevo_p = pd.DataFrame([{
+                    "ID_Usuario": "User1", 
+                    "Proyecto": nombre_p, 
+                    "Fecha_Inicio": str(fecha_inicio_rodaje),
+                    "Horas_Jornada": h_jornada, 
+                    "Tiempo_Comida": t_comida, 
+                    "Descanso_Incluido": descanso, 
+                    "Estado": "Activo"
+                }])
                 df_final = pd.concat([df_existente, nuevo_p], ignore_index=True)
                 conn.update(worksheet="Config_Proyectos", data=df_final)
                 st.success(f"Proyecto '{nombre_p}' guardado.")
@@ -60,22 +68,45 @@ elif opcion == "Fichar Jornada":
                 st.success("¡Jornada guardada!")
                 st.balloons()
 
-# --- SECCIÓN: MI HISTORIAL (LA VISTA LITE) ---
+# --- SECCIÓN: MI HISTORIAL ---
 elif opcion == "Mi Historial":
-    st.title("📅 Mi Historial")
+    st.title("📅 Historial de Rodaje")
     df_fichajes = conn.read(worksheet="Fichajes_Diarios", ttl=0)
+    df_proyectos = conn.read(worksheet="Config_Proyectos", ttl=0)
     
     if df_fichajes.empty:
         st.info("Aún no tienes jornadas registradas.")
     else:
-        # Mostramos la tabla limpia
-        columnas_visibles = ["Proyecto", "Fecha", "Tipo_Dia", "Hora_Inicio", "Corte_Camara", "Hora_Fin_Jornada"]
-        st.dataframe(df_fichajes[columnas_visibles], use_container_width=True)
+        df_fichajes['Fecha'] = pd.to_datetime(df_fichajes['Fecha'])
         
-        st.write("---")
-        # EL GANCHO COMERCIAL (Upselling)
-        st.info("💡 **Tip Profesional:** ¿Quieres saber cuánto has acumulado en horas extras y nocturnidad?")
-        if st.button("🚀 CALCULAR NÓMINA AHORA"):
-            st.write("Copia tus horas y pégalas en nuestra **Calculadora de Nómina** para ver tu sueldo neto.")
-            # Aquí pondrías el link real a tu otra calculadora
-            st.link_button("Ir a Calculadora Nómina", "https://tu-otra-app.streamlit.app")
+        for proyecto in df_fichajes['Proyecto'].unique():
+            st.subheader(f"🎥 Proyecto: {proyecto}")
+            info_p = df_proyectos[df_proyectos['Proyecto'] == proyecto]
+            
+            if not info_p.empty:
+                # Obtenemos la fecha de inicio configurada
+                fecha_inicio = pd.to_datetime(info_p['Fecha_Inicio'].iloc[0])
+                
+                def calc_semana_rodaje(fecha_actual, fecha_ref):
+                    diff_dias = (fecha_actual - fecha_ref).days
+                    # Cálculo: días entre 7, redondeado hacia abajo + 1
+                    num_sem = math.floor(diff_dias / 7) + 1
+                    # Ajuste para que después de la -1 vaya la 1
+                    if num_sem <= 0:
+                        return num_sem - 1
+                    return num_sem
+
+                df_p = df_fichajes[df_fichajes['Proyecto'] == proyecto].copy()
+                df_p['Semana_Rodaje'] = df_p['Fecha'].apply(lambda x: calc_semana_rodaje(x, fecha_inicio))
+                
+                # Ordenar para que la última semana grabada salga arriba
+                semanas = sorted(df_p['Semana_Rodaje'].unique(), reverse=True)
+                
+                for sem in semanas:
+                    txt_sem = f"Semana {sem}" if sem > 0 else f"Pre-producción (S{sem})"
+                    with st.expander(f"📂 {txt_sem}", expanded=True):
+                        datos_sem = df_p[df_p['Semana_Rodaje'] == sem].sort_values("Fecha")
+                        datos_sem['Fecha_Bonita'] = datos_sem['Fecha'].dt.strftime('%d/%m/%Y')
+                        st.table(datos_sem[["Fecha_Bonita", "Tipo_Dia", "Hora_Inicio", "Corte_Camara", "Hora_Fin_Jornada"]])
+            else:
+                st.error(f"Configuración no encontrada para {proyecto}")
