@@ -39,7 +39,7 @@ with st.form("nuevo_proyecto"):
             # Lo enviamos a la pestaña correspondiente
             try:
                 # Nota: El nombre de la hoja debe coincidir exactamente con tu pestaña
-                conn.create(worksheet="Config_Proyectos", data=nuevo_dato)
+                conn.update(worksheet="Config_Proyectos", data=nuevo_dato)
                 st.success(f"¡Proyecto '{nombre_p}' creado! Ahora puedes ir al registro diario.")
                 st.balloons()
             except Exception as e:
