@@ -5,7 +5,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="WrapTime Lite", page_icon="🎬")
 
-# 1. CONEXIÓN (Sin caché para que sea instantáneo)
+# 1. CONEXIÓN
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 2. MENÚ LATERAL
@@ -15,6 +15,10 @@ opcion = st.sidebar.radio("Ir a:", ["Fichar Jornada", "Configurar Proyecto"])
 # --- SECCIÓN: CONFIGURAR PROYECTO ---
 if opcion == "Configurar Proyecto":
     st.title("🎬 Configuración de Proyecto")
+    
+    # Leemos proyectos existentes para no perderlos
+    df_existente = conn.read(worksheet="Config_Proyectos", ttl=0)
+    
     with st.form("nuevo_proyecto"):
         nombre_p = st.text_input("Nombre del Proyecto")
         h_jornada = st.number_input("Horas jornada base", value=8)
@@ -24,27 +28,29 @@ if opcion == "Configurar Proyecto":
         if st.form_submit_button("Guardar Proyecto"):
             if nombre_p:
                 nuevo_p = pd.DataFrame([{"ID_Usuario": "User1", "Proyecto": nombre_p, "Horas_Jornada": h_jornada, "Tiempo_Comida": t_comida, "Descanso_Incluido": descanso, "Estado": "Activo"}])
-                # Actualizamos la hoja
-                conn.update(worksheet="Config_Proyectos", data=nuevo_p)
-                st.success(f"Proyecto '{nombre_p}' guardado con éxito.")
-                # Borramos la caché para que el selector se actualice
+                
+                # Juntamos lo viejo con lo nuevo
+                df_final = pd.concat([df_existente, nuevo_p], ignore_index=True)
+                
+                # Guardamos todo el bloque
+                conn.update(worksheet="Config_Proyectos", data=df_final)
+                st.success(f"Proyecto '{nombre_p}' guardado.")
                 st.cache_data.clear()
-                st.info("Ya puedes ir a 'Fichar Jornada' en el menú lateral.")
                 st.balloons()
             else:
-                st.error("Escribe un nombre para el proyecto.")
+                st.error("Escribe un nombre.")
 
 # --- SECCIÓN: FICHAR JORNADA ---
 elif opcion == "Fichar Jornada":
     st.title("📝 Registro Diario")
     
-    # IMPORTANTE: Forzamos la lectura fresca del Excel
-    df_proyectos = conn.read(worksheet="Config_Proyectos", ttl=0) # ttl=0 significa "sin espera"
+    df_proyectos = conn.read(worksheet="Config_Proyectos", ttl=0)
+    # Leemos fichajes existentes para añadir, no borrar
+    df_fichajes_existentes = conn.read(worksheet="Fichajes_Diarios", ttl=0)
     
     if df_proyectos.empty:
-        st.warning("⚠️ No hay proyectos creados. Ve a 'Configurar Proyecto' primero.")
+        st.warning("⚠️ Crea un proyecto primero.")
     else:
-        # Limpiamos posibles filas vacías y sacamos la lista de nombres
         lista_proyectos = df_proyectos["Proyecto"].dropna().unique().tolist()
         
         with st.form("fichaje_diario"):
@@ -73,6 +79,10 @@ elif opcion == "Fichar Jornada":
                     "Hora_Fin_Jornada": str(h_fin),
                     "Comida": comida
                 }])
-                conn.update(worksheet="Fichajes_Diarios", data=nuevo_fichaje)
-                st.success("¡Jornada guardada correctamente!")
+                
+                # Juntamos fichajes viejos con el nuevo
+                df_fichajes_final = pd.concat([df_fichajes_existentes, nuevo_fichaje], ignore_index=True)
+                
+                conn.update(worksheet="Fichajes_Diarios", data=df_fichajes_final)
+                st.success("¡Jornada guardada!")
                 st.balloons()
