@@ -23,7 +23,7 @@ with st.sidebar:
     st.markdown("---")
     opcion_menu = st.selectbox("Navegación", ["🏗️ Configurar Proyecto", "📝 Fichar Jornada", "📅 Mi Historial"], index=1)
     st.markdown("---")
-    st.caption("Versión 1.5 - UI Chips")
+    st.caption("Versión 1.6 - Formato HH:MM")
 
 # --- LÓGICA ---
 if "Configurar Proyecto" in opcion_menu:
@@ -47,15 +47,12 @@ elif "Fichar Jornada" in opcion_menu:
         st.warning("Crea un proyecto primero.")
     else:
         lista_p = df_proyectos["Proyecto"].dropna().unique().tolist()
-        
         proyecto_sel = st.selectbox("🎬 Proyecto", lista_p)
         fecha = st.date_input("📅 Fecha", datetime.now(), format="DD/MM/YYYY")
         
-        # --- NUEVAS ETIQUETAS TIPO PILLS (BOTONES) ---
         st.write("📋 **Tipo de jornada:**")
         opciones_jornada = ["Normal", "Festivo", "Viaje", "Pruebas", "Carga", "Oficina", "Loc.", "Chequeo"]
-        # st.pills crea botones que se pueden seleccionar (puedes marcar varios)
-        tipo_dia_lista = st.pills("Selecciona las etiquetas correspondientes:", opciones_jornada, selection_mode="multi", default="Normal")
+        tipo_dia_lista = st.pills("Selecciona las etiquetas:", opciones_jornada, selection_mode="multi", default="Normal")
 
         st.write("---")
         c1, c2, c3 = st.columns(3)
@@ -65,7 +62,6 @@ elif "Fichar Jornada" in opcion_menu:
         
         st.write("---")
         st.write("⚠️ **Incidencias:**")
-        # Aquí mantenemos los checks de incidencias por ser algo más de "alerta"
         i1, i2, i3 = st.columns(3)
         inc_com = i1.checkbox("❌ No comida")
         inc_cor = i1.checkbox("⏱️ No 15 min")
@@ -73,12 +69,11 @@ elif "Fichar Jornada" in opcion_menu:
         inc_kms = i2.checkbox("🚗 Kms")
         inc_die = i3.checkbox("🍴 Dietas")
         inc_otr = i3.checkbox("❓ Otros")
-        
         obs = st.text_area("📝 Notas")
 
         if st.button("💾 Guardar Jornada"):
             if not tipo_dia_lista:
-                st.error("Selecciona al menos un tipo de jornada (ej: Normal).")
+                st.error("Selecciona al menos un tipo de jornada.")
             else:
                 t_str = ", ".join(tipo_dia_lista)
                 alertas = [k for k, v in {"No comida":inc_com,"No 15m":inc_cor,"Turnaround":inc_tur,"Km":inc_kms,"Dietas":inc_die,"Otros":inc_otr}.items() if v]
@@ -101,6 +96,13 @@ elif "Mi Historial" in opcion_menu:
     
     if not df_f.empty:
         df_f['Fecha'] = pd.to_datetime(df_f['Fecha'])
+        
+        # --- LIMPIEZA DE HORAS (Quitar segundos) ---
+        for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
+            if col in df_f.columns:
+                # Convertimos a string y cortamos los últimos 3 caracteres (:ss)
+                df_f[col] = df_f[col].astype(str).str[:5]
+
         for p in df_f['Proyecto'].unique():
             st.subheader(f"🎥 {p}")
             info = df_p[df_p['Proyecto'] == p]
@@ -108,8 +110,10 @@ elif "Mi Historial" in opcion_menu:
                 start = pd.to_datetime(info['Fecha_Inicio'].iloc[0])
                 df_proy = df_f[df_f['Proyecto'] == p].copy()
                 df_proy['Semana'] = df_proy['Fecha'].apply(lambda x: (math.floor((x-start).days/7)+1) if (x-start).days >=0 else (math.floor((x-start).days/7)))
+                
                 for s in sorted(df_proy['Semana'].unique(), reverse=True):
                     with st.expander(f"📂 Semana {s}" if s>0 else f"📂 Pre-prod (S{s})"):
                         d_s = df_proy[df_proy['Semana'] == s].sort_values("Fecha")
                         d_s['F'] = d_s['Fecha'].dt.strftime('%d/%m/%Y')
+                        # Mostramos las columnas relevantes sin segundos
                         st.table(d_s[["F", "Tipo_Dia", "Hora_Inicio", "Hora_Fin_Jornada", "Incidencias"]])
