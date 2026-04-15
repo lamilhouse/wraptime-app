@@ -14,7 +14,7 @@ opcion = st.sidebar.radio("Ir a:", ["Fichar Jornada", "Mi Historial", "Configura
 # --- SECCIÓN: CONFIGURAR PROYECTO ---
 if opcion == "Configurar Proyecto":
     st.title("🎬 Configuración de Proyecto")
-    df_existente = conn.read(worksheet="Config_Proyectos", ttl=0)
+    df_existente = conn.read(worksheet="Config_Proyectos", ttl=10)
     
     with st.form("nuevo_proyecto"):
         nombre_p = st.text_input("Nombre del Proyecto")
@@ -44,8 +44,8 @@ if opcion == "Configurar Proyecto":
 # --- SECCIÓN: FICHAR JORNADA ---
 elif opcion == "Fichar Jornada":
     st.title("📝 Registro Diario")
-    df_proyectos = conn.read(worksheet="Config_Proyectos", ttl=0)
-    df_fichajes_existentes = conn.read(worksheet="Fichajes_Diarios", ttl=0)
+    df_proyectos = conn.read(worksheet="Config_Proyectos", ttl=10)
+    df_fichajes_existentes = conn.read(worksheet="Fichajes_Diarios", ttl=10)
     
     if df_proyectos.empty:
         st.warning("⚠️ Crea un proyecto primero.")
