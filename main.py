@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, time, timedelta
 import math
 import re
+import io
 
 st.set_page_config(page_title="WrapTime Lite", page_icon="🎬", layout="centered")
 
@@ -39,9 +40,12 @@ with st.sidebar:
         df_f_user = df_f_all[df_f_all['ID_Usuario'] == user_id] if not df_f_all.empty else pd.DataFrame()
         
         if not df_f_user.empty and not df_p_user.empty:
+            p_info = df_p_user.iloc[0]
+            
+            # Preparar datos del historial
             df_export = df_f_user.copy()
             df_export['Fecha'] = pd.to_datetime(df_export['Fecha'])
-            f_ini_p = pd.to_datetime(df_p_user.iloc[0]['Fecha_Inicio'])
+            f_ini_p = pd.to_datetime(p_info['Fecha_Inicio'])
             
             def calc_semana_csv(f):
                 d = (f - f_ini_p).days
@@ -50,12 +54,25 @@ with st.sidebar:
             df_export['Semana'] = df_export['Fecha'].apply(calc_semana_csv)
             df_export = df_export.sort_values("Fecha")
             
-            # --- CAMBIO: REORDENAR COLUMNAS PARA EL CSV ---
-            columnas = ['Semana'] + [col for col in df_export.columns if col != 'Semana']
-            df_export = df_export[columnas]
+            # Reordenar columnas (Semana primero)
+            cols = ['Semana'] + [c for c in df_export.columns if c != 'Semana']
+            df_export = df_export[cols]
             
-            csv = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
-            st.download_button("📥 Descargar CSV", data=csv, file_name=f"historial_{user_id}.csv", mime="text/csv")
+            # --- GENERACIÓN DEL CSV CON ENCABEZADO FIJO ---
+            output = io.StringIO()
+            # Escribir encabezado informativo
+            output.write(f"REPORTE DE JORNADAS - WrapTime Lite\n")
+            output.write(f"Proyecto:;{p_info['Proyecto']}\n")
+            output.write(f"Usuario:;{user_id}\n")
+            output.write(f"Contrato:;{p_info['Horas_Contrato']}h día / {p_info['Horas_Semana']}h semana\n")
+            output.write(f"Fecha exportación:;{datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
+            output.write("\n") # Línea en blanco
+            
+            # Escribir los datos del DataFrame
+            df_export.to_csv(output, index=False, sep=';', lineterminator='\n', encoding='utf-8-sig')
+            
+            csv_data = output.getvalue().encode('utf-8-sig')
+            st.download_button("📥 Descargar Reporte CSV", data=csv_data, file_name=f"reporte_{user_id}.csv", mime="text/csv")
     except:
         df_p_user = pd.DataFrame()
         df_f_user = pd.DataFrame()
@@ -95,7 +112,7 @@ if "Proyecto" in opcion_menu:
                         conn.update(worksheet="Fichajes_Diarios", data=df_f_all)
                     
                     st.cache_data.clear()
-                    st.success("Proyecto e historial actualizados automáticamente")
+                    st.success("Proyecto e historial actualizados")
                     st.rerun()
 
         if st.button("🗑️ Eliminar Proyecto (Reset total)"):
