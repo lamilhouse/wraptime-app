@@ -34,7 +34,6 @@ with st.sidebar:
     opcion_menu = st.selectbox("Menú", ["🏗️ Proyecto", "📝 Fichar Jornada", "📅 Mi Historial"], index=1)
     
     try:
-        # Lectura de datos
         df_p_all = conn.read(worksheet="Config_Proyectos", ttl="0s")
         df_p_user = df_p_all[df_p_all['ID_Usuario'].str.lower() == user_id] if not df_p_all.empty else pd.DataFrame()
         
@@ -54,23 +53,20 @@ with st.sidebar:
             for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                 df_csv[col] = df_csv[col].astype(str).str[:5]
             
+            # Reordenar: Semana es la primera columna
             df_csv = df_csv[['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']]
             df_csv['Fecha'] = df_csv['Fecha'].dt.strftime('%d/%m/%Y')
             df_csv.columns = ['Semana', 'Fecha', 'Tipo', 'Call', 'Corte', 'Fin', 'Alertas', 'Notas']
 
-            # Exportación: Fijos en A, Tabla empieza en B
-            num_cols_total = len(df_csv.columns) + 1
             output = io.StringIO()
-            output.write(f"REPORTE DE JORNADAS - WrapTime Lite{';' * (num_cols_total-1)}\n")
-            output.write(f"Proyecto;{p_info['Proyecto']}{';' * (num_cols_total-2)}\n")
-            output.write(f"Usuario;{user_id}{';' * (num_cols_total-2)}\n")
-            output.write(f"Contrato;{p_info['Horas_Contrato']}h/día{';' * (num_cols_total-2)}\n")
-            output.write(";" * (num_cols_total) + "\n")
+            # Escribimos los datos fijos en las primeras filas
+            output.write(f"PROYECTO;{p_info['Proyecto']}\n")
+            output.write(f"USUARIO;{user_id}\n")
+            output.write(f"CONTRATO;{p_info['Horas_Contrato']}h/dia\n")
+            output.write("\n") # Espacio antes de la tabla
             
-            # Cabecera de tabla (vacío en A, empieza en B)
-            output.write(";" + ";".join(df_csv.columns) + "\n")
-            for _, row in df_csv.iterrows():
-                output.write(";" + ";".join(row.astype(str)) + "\n")
+            # Escribimos la tabla normal empezando en Columna A
+            df_csv.to_csv(output, index=False, sep=';', lineterminator='\n', encoding='utf-8-sig')
             
             st.download_button("📥 Descargar Reporte CSV", data=output.getvalue().encode('utf-8-sig'), file_name=f"reporte_{user_id}.csv", mime="text/csv")
     except:
