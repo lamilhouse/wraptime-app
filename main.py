@@ -74,7 +74,7 @@ elif "Fichar Jornada" in opcion_menu:
         st.warning("Configura tu proyecto primero.")
     else:
         fecha = st.date_input("📅 Fecha", datetime.now(), format="DD/MM/YYYY")
-        tags = st.pills("Tipo:", ["Normal", "Festivo", "Viaje", "Pruebas", "Carga", "Oficina"], default="Normal")
+        tags = st.pills("Tipo:", ["Rodaje", "Chequeo", "Viaje", "Pruebas", "Carga", "Localización", "Oficina"], default="Normal")
         
         c1, c2, c3 = st.columns(3)
         h_ini = c1.time_input("🕒 Call", time(8, 0))
