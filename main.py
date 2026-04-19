@@ -3,6 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, time, timedelta
 import math
+import re
 
 st.set_page_config(page_title="WrapTime Lite", page_icon="🎬", layout="centered")
 
@@ -14,7 +15,7 @@ def calcular_duracion(h_ini, h_fin):
     inicio = datetime.combine(hoy, h_ini)
     fin = datetime.combine(hoy, h_fin)
     if fin <= inicio: fin += timedelta(days=1)
-    return round((fin - inicio).total_seconds() / 3600, 1) # Redondeado a 1 decimal
+    return round((fin - inicio).total_seconds() / 3600, 1)
 
 # --- SINCRONIZACIÓN DE HORAS ---
 if 'hora_wrap' not in st.session_state: st.session_state.hora_wrap = time(19, 0)
@@ -141,7 +142,6 @@ elif "Mi Historial" in opcion_menu:
             with st.expander(f"{titulo_sem} — {horas_sem}h totales"):
                 df_print = df_sem.copy()
                 df_print['Día'] = df_print['Fecha'].dt.strftime('%d/%m/%Y')
-                # Limpieza visual de segundos en la tabla
                 for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                     df_print[col] = df_print[col].astype(str).str[:5]
                 st.table(df_print[["Día", "Tipo_Dia", "Hora_Inicio", "Corte_Camara", "Hora_Fin_Jornada", "Horas_Totales", "Incidencias"]])
@@ -152,13 +152,17 @@ elif "Mi Historial" in opcion_menu:
             fecha_sel = st.selectbox("Selecciona día:", df_f_user['Día_Str'].unique())
             datos_dia = df_f_user[df_f_user['Día_Str'] == fecha_sel].iloc[0]
             
-            # Limpieza de seguridad para evitar el error ValueError al editar
-            h_ini_clean = str(datos_dia['Hora_Inicio'])[:5]
-            h_fin_clean = str(datos_dia['Hora_Fin_Jornada'])[:5]
+            # Limpieza profunda de strings de hora
+            def limpiar_hora(s):
+                clean = re.sub(r'[^0-9:]', '', str(s))[:5]
+                try:
+                    return datetime.strptime(clean, "%H:%M").time()
+                except:
+                    return time(8, 0)
 
             col_ed1, col_ed2 = st.columns(2)
-            nueva_h_ini = col_ed1.time_input("Nueva Hora Inicio", datetime.strptime(h_ini_clean, "%H:%M").time())
-            nueva_h_fin = col_ed2.time_input("Nueva Hora Fin", datetime.strptime(h_fin_clean, "%H:%M").time())
+            nueva_h_ini = col_ed1.time_input("Nueva Hora Inicio", limpiar_hora(datos_dia['Hora_Inicio']))
+            nueva_h_fin = col_ed2.time_input("Nueva Hora Fin", limpiar_hora(datos_dia['Hora_Fin_Jornada']))
             nuevas_obs = st.text_area("Notas / Observaciones", value=datos_dia['Observaciones'])
             
             c_btn1, c_btn2 = st.columns(2)
