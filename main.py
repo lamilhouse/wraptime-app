@@ -50,7 +50,6 @@ with st.sidebar:
             df_csv['Semana'] = df_csv['Fecha'].apply(lambda f: (math.floor((f - f_ini_p).days / 7) + 1))
             df_csv = df_csv.sort_values("Fecha")
             
-            # Limpieza CSV: Mantenemos Semana en la tabla, quitamos lo redundante de cabecera
             cols_csv = ['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']
             df_csv = df_csv[cols_csv]
             df_csv['Fecha'] = df_csv['Fecha'].dt.strftime('%d/%m/%Y')
@@ -160,11 +159,25 @@ elif "Mi Historial" in opcion_menu:
                 df_tab['Día'] = df_tab['Fecha'].dt.strftime('%d/%m/%Y')
                 for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                     df_tab[col] = df_tab[col].astype(str).apply(lambda x: re.sub(r':$', '', x[:5]))
-                df_tab = df_tab.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Corte_Camara": "Corte", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "Horas", "Incidencias": "Alertas"})
-                st.dataframe(df_tab[["Día", "Tipo", "Call", "Corte", "Fin", "Horas", "Alertas"]], hide_index=True, use_container_width=True)
+                
+                # Renombrar columnas e incluir Observaciones
+                df_tab = df_tab.rename(columns={
+                    "Tipo_Dia": "Tipo", 
+                    "Hora_Inicio": "Call", 
+                    "Corte_Camara": "Corte", 
+                    "Hora_Fin_Jornada": "Fin", 
+                    "Horas_Totales": "Horas", 
+                    "Incidencias": "Alertas",
+                    "Observaciones": "Notas"
+                })
+                st.dataframe(
+                    df_tab[["Día", "Tipo", "Call", "Corte", "Fin", "Horas", "Alertas", "Notas"]], 
+                    hide_index=True, 
+                    use_container_width=True
+                )
         
         st.markdown("---")
-        with st.expander("✏️ Gestionar Jornadas (Editar todo)"):
+        with st.expander("✏️ Gestionar Jornadas"):
             df_f_user['Día_Str'] = df_f_user['Fecha'].dt.strftime('%d/%m/%Y')
             f_sel = st.selectbox("Selecciona día para editar:", df_f_user['Día_Str'].unique())
             datos = df_f_user[df_f_user['Día_Str'] == f_sel].iloc[0]
@@ -174,7 +187,6 @@ elif "Mi Historial" in opcion_menu:
                 try: return datetime.strptime(c, "%H:%M").time()
                 except: return time(8, 0)
 
-            # Formulario de edición extendido
             with st.form("form_edit_jornada"):
                 ed_tipo = st.selectbox("Tipo de día", ["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"], index=["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"].index(datos['Tipo_Dia']))
                 c1, c2 = st.columns(2)
@@ -182,7 +194,6 @@ elif "Mi Historial" in opcion_menu:
                 n_fin = c2.time_input("Nuevo Fin", l_h(datos['Hora_Fin_Jornada']))
                 
                 st.write("Incidencias:")
-                check_list = ["No comida", "No 15m", "Turnaround", "Dietas"]
                 incidencias_previa = str(datos['Incidencias']).split(", ")
                 c_i1, c_i2, c_i3, c_i4 = st.columns(4)
                 v_comida = c_i1.checkbox("No comida", value="No comida" in incidencias_previa)
@@ -192,7 +203,7 @@ elif "Mi Historial" in opcion_menu:
                 
                 n_obs = st.text_area("Observaciones", value=str(datos['Observaciones']))
                 
-                if st.form_submit_button("💾 Guardar Cambios en esta Jornada"):
+                if st.form_submit_button("💾 Guardar Cambios"):
                     f_dt = datetime.strptime(f_sel, '%d/%m/%Y').strftime('%Y-%m-%d')
                     df_new = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == f_dt))]
                     h_ed = calcular_duracion(n_ini, n_fin)
