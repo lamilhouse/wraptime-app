@@ -50,13 +50,17 @@ with st.sidebar:
             df_export['Semana'] = df_export['Fecha'].apply(calc_semana_csv)
             df_export = df_export.sort_values("Fecha")
             
+            # --- CAMBIO: REORDENAR COLUMNAS PARA EL CSV ---
+            columnas = ['Semana'] + [col for col in df_export.columns if col != 'Semana']
+            df_export = df_export[columnas]
+            
             csv = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
             st.download_button("📥 Descargar CSV", data=csv, file_name=f"historial_{user_id}.csv", mime="text/csv")
     except:
         df_p_user = pd.DataFrame()
         df_f_user = pd.DataFrame()
 
-# --- 1. PROYECTO (ACTUALIZACIÓN AUTOMÁTICA) ---
+# --- 1. PROYECTO ---
 if "Proyecto" in opcion_menu:
     st.title("🏗️ Configuración del Proyecto")
     
@@ -79,7 +83,6 @@ if "Proyecto" in opcion_menu:
                 n_h_sem = col_h2.number_input("Horas semana contrato", value=int(p['Horas_Semana']))
                 
                 if st.form_submit_button("Actualizar Proyecto"):
-                    # 1. Actualizar Configuración
                     df_p_new = df_p_all[df_p_all['ID_Usuario'] != user_id]
                     editado = pd.DataFrame([{
                         "ID_Usuario": user_id, "Proyecto": nuevo_n, "Fecha_Inicio": str(nueva_f), 
@@ -87,7 +90,6 @@ if "Proyecto" in opcion_menu:
                     }])
                     conn.update(worksheet="Config_Proyectos", data=pd.concat([df_p_new, editado], ignore_index=True))
                     
-                    # 2. Actualización Automática del Historial (Nombre de proyecto)
                     if not df_f_user.empty:
                         df_f_all.loc[df_f_all['ID_Usuario'] == user_id, 'Proyecto'] = nuevo_n
                         conn.update(worksheet="Fichajes_Diarios", data=df_f_all)
@@ -115,7 +117,7 @@ if "Proyecto" in opcion_menu:
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 2. FICHAR (SIN CAMBIOS) ---
+# --- 2. FICHAR ---
 elif "Fichar Jornada" in opcion_menu:
     st.title("📝 Fichaje")
     if df_p_user.empty:
@@ -153,7 +155,7 @@ elif "Fichar Jornada" in opcion_menu:
             st.cache_data.clear()
             st.toast("✅ Registrado")
 
-# --- 3. HISTORIAL (SIN CAMBIOS EN LÓGICA DE SEMANAS) ---
+# --- 3. HISTORIAL ---
 elif "Mi Historial" in opcion_menu:
     st.title("📅 Mi Historial")
     if not df_f_user.empty and not df_p_user.empty:
