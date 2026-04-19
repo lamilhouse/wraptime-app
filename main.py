@@ -56,14 +56,47 @@ with st.sidebar:
         df_p_user = pd.DataFrame()
         df_f_user = pd.DataFrame()
 
-# --- 1. PROYECTO ---
+# --- 1. PROYECTO (ACTUALIZACIÓN AUTOMÁTICA) ---
 if "Proyecto" in opcion_menu:
-    st.title("🏗️ Configuración")
+    st.title("🏗️ Configuración del Proyecto")
+    
     if not df_p_user.empty:
         p = df_p_user.iloc[0]
-        st.success(f"Proyecto: **{p['Proyecto']}**")
-        st.info(f"Día 1: {pd.to_datetime(p['Fecha_Inicio']).strftime('%d/%m/%Y')}")
-        if st.button("🗑️ Resetear mi proyecto"):
+        
+        with st.container(border=True):
+            st.subheader(f"🎥 {p['Proyecto']}")
+            c1, c2 = st.columns(2)
+            c1.metric("Jornada Contrato", f"{p['Horas_Contrato']} h")
+            c2.metric("Semana Contrato", f"{p['Horas_Semana']} h")
+            st.info(f"📅 Fecha inicio (Día 1): {pd.to_datetime(p['Fecha_Inicio']).strftime('%d/%m/%Y')}")
+
+        with st.expander("✏️ Editar parámetros del proyecto"):
+            with st.form("edit_p"):
+                nuevo_n = st.text_input("Nombre del Rodaje", value=p['Proyecto'])
+                nueva_f = st.date_input("Día 1", pd.to_datetime(p['Fecha_Inicio']))
+                col_h1, col_h2 = st.columns(2)
+                n_h_dia = col_h1.number_input("Horas jornada contrato", value=int(p['Horas_Contrato']))
+                n_h_sem = col_h2.number_input("Horas semana contrato", value=int(p['Horas_Semana']))
+                
+                if st.form_submit_button("Actualizar Proyecto"):
+                    # 1. Actualizar Configuración
+                    df_p_new = df_p_all[df_p_all['ID_Usuario'] != user_id]
+                    editado = pd.DataFrame([{
+                        "ID_Usuario": user_id, "Proyecto": nuevo_n, "Fecha_Inicio": str(nueva_f), 
+                        "Horas_Contrato": n_h_dia, "Horas_Semana": n_h_sem, "Estado": "Activo"
+                    }])
+                    conn.update(worksheet="Config_Proyectos", data=pd.concat([df_p_new, editado], ignore_index=True))
+                    
+                    # 2. Actualización Automática del Historial (Nombre de proyecto)
+                    if not df_f_user.empty:
+                        df_f_all.loc[df_f_all['ID_Usuario'] == user_id, 'Proyecto'] = nuevo_n
+                        conn.update(worksheet="Fichajes_Diarios", data=df_f_all)
+                    
+                    st.cache_data.clear()
+                    st.success("Proyecto e historial actualizados automáticamente")
+                    st.rerun()
+
+        if st.button("🗑️ Eliminar Proyecto (Reset total)"):
             df_p_new = df_p_all[df_p_all['ID_Usuario'] != user_id]
             conn.update(worksheet="Config_Proyectos", data=df_p_new)
             st.cache_data.clear()
@@ -82,7 +115,7 @@ if "Proyecto" in opcion_menu:
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 2. FICHAR ---
+# --- 2. FICHAR (SIN CAMBIOS) ---
 elif "Fichar Jornada" in opcion_menu:
     st.title("📝 Fichaje")
     if df_p_user.empty:
@@ -120,7 +153,7 @@ elif "Fichar Jornada" in opcion_menu:
             st.cache_data.clear()
             st.toast("✅ Registrado")
 
-# --- 3. HISTORIAL POR SEMANAS ---
+# --- 3. HISTORIAL (SIN CAMBIOS EN LÓGICA DE SEMANAS) ---
 elif "Mi Historial" in opcion_menu:
     st.title("📅 Mi Historial")
     if not df_f_user.empty and not df_p_user.empty:
@@ -152,13 +185,10 @@ elif "Mi Historial" in opcion_menu:
             fecha_sel = st.selectbox("Selecciona día:", df_f_user['Día_Str'].unique())
             datos_dia = df_f_user[df_f_user['Día_Str'] == fecha_sel].iloc[0]
             
-            # Limpieza profunda de strings de hora
             def limpiar_hora(s):
                 clean = re.sub(r'[^0-9:]', '', str(s))[:5]
-                try:
-                    return datetime.strptime(clean, "%H:%M").time()
-                except:
-                    return time(8, 0)
+                try: return datetime.strptime(clean, "%H:%M").time()
+                except: return time(8, 0)
 
             col_ed1, col_ed2 = st.columns(2)
             nueva_h_ini = col_ed1.time_input("Nueva Hora Inicio", limpiar_hora(datos_dia['Hora_Inicio']))
