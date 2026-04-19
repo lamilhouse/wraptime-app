@@ -34,6 +34,7 @@ with st.sidebar:
     opcion_menu = st.selectbox("Menú", ["🏗️ Proyecto", "📝 Fichar Jornada", "📅 Mi Historial"], index=1)
     
     try:
+        # Lectura de datos
         df_p_all = conn.read(worksheet="Config_Proyectos", ttl="0s")
         df_p_user = df_p_all[df_p_all['ID_Usuario'].str.lower() == user_id] if not df_p_all.empty else pd.DataFrame()
         
@@ -43,7 +44,7 @@ with st.sidebar:
         if not df_f_user.empty and not df_p_user.empty:
             p_info = df_p_user.iloc[0]
             
-            # Preparación de datos para el CSV
+            # Preparación CSV
             df_csv = df_f_user.copy()
             df_csv['Fecha'] = pd.to_datetime(df_csv['Fecha'])
             f_ini_p = pd.to_datetime(p_info['Fecha_Inicio'])
@@ -53,32 +54,23 @@ with st.sidebar:
             for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                 df_csv[col] = df_csv[col].astype(str).str[:5]
             
-            # Reorganizar columnas: La primera será una columna vacía para alinear con los títulos fijos
             df_csv = df_csv[['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']]
             df_csv['Fecha'] = df_csv['Fecha'].dt.strftime('%d/%m/%Y')
             df_csv.columns = ['Semana', 'Fecha', 'Tipo', 'Call', 'Corte', 'Fin', 'Alertas', 'Notas']
 
-            # --- EXPORTACIÓN: Datos fijos en A, Tabla empieza en B ---
-            num_cols_tabla = len(df_csv.columns) # 8 columnas
-            
+            # Exportación: Fijos en A, Tabla empieza en B
+            num_cols_total = len(df_csv.columns) + 1
             output = io.StringIO()
-            # Cabecera: El título en A1, el resto vacío
-            output.write(f"REPORTE DE JORNADAS - WrapTime Lite{';' * num_cols_tabla}\n")
-            # Filas fijas: Etiqueta en A, Valor en B, resto vacío
-            output.write(f"Proyecto;{p_info['Proyecto']}{';' * (num_cols_tabla - 1)}\n")
-            output.write(f"Usuario;{user_id}{';' * (num_cols_tabla - 1)}\n")
-            output.write(f"Contrato;{p_info['Horas_Contrato']}h día / {p_info['Horas_Semana']}h semana{';' * (num_cols_tabla - 1)}\n")
-            output.write(f"Exportado el;{datetime.now().strftime('%d/%m/%Y %H:%M')}{';' * (num_cols_tabla - 1)}\n")
-            output.write(";" * num_cols_tabla + "\n") # Separador
+            output.write(f"REPORTE DE JORNADAS - WrapTime Lite{';' * (num_cols_total-1)}\n")
+            output.write(f"Proyecto;{p_info['Proyecto']}{';' * (num_cols_total-2)}\n")
+            output.write(f"Usuario;{user_id}{';' * (num_cols_total-2)}\n")
+            output.write(f"Contrato;{p_info['Horas_Contrato']}h/día{';' * (num_cols_total-2)}\n")
+            output.write(";" * (num_cols_total) + "\n")
             
-            # Para la tabla, añadimos un separador al principio de cada línea para que "Semana" caiga en la Columna B
-            # Pero como queremos que la cabecera de la tabla también esté desplazada:
-            header_line = ";" + ";".join(df_csv.columns) + "\n"
-            output.write(header_line)
-            
+            # Cabecera de tabla (vacío en A, empieza en B)
+            output.write(";" + ";".join(df_csv.columns) + "\n")
             for _, row in df_csv.iterrows():
-                line = ";" + ";".join(row.astype(str)) + "\n"
-                output.write(line)
+                output.write(";" + ";".join(row.astype(str)) + "\n")
             
             st.download_button("📥 Descargar Reporte CSV", data=output.getvalue().encode('utf-8-sig'), file_name=f"reporte_{user_id}.csv", mime="text/csv")
     except:
@@ -99,7 +91,7 @@ if "Proyecto" in opcion_menu:
 
         with st.expander("✏️ Editar proyecto"):
             with st.form("edit_p"):
-                nuevo_n = st.text_input("Nombre", value=p['Proyecto'])
+                nuevo_n = st.text_input("Nombre del Rodaje", value=p['Proyecto'])
                 nueva_f = st.date_input("Día 1", pd.to_datetime(p['Fecha_Inicio']))
                 col_h1, col_h2 = st.columns(2)
                 n_h_dia = col_h1.number_input("Horas día", value=int(p['Horas_Contrato']))
@@ -108,14 +100,11 @@ if "Proyecto" in opcion_menu:
                     df_p_new = df_p_all[df_p_all['ID_Usuario'].str.lower() != user_id]
                     editado = pd.DataFrame([{"ID_Usuario": user_id, "Proyecto": nuevo_n, "Fecha_Inicio": str(nueva_f), "Horas_Contrato": n_h_dia, "Horas_Semana": n_h_sem, "Estado": "Activo"}])
                     conn.update(worksheet="Config_Proyectos", data=pd.concat([df_p_new, editado], ignore_index=True))
-                    if not df_f_user.empty:
-                        df_f_all.loc[df_f_all['ID_Usuario'].str.lower() == user_id, 'Proyecto'] = nuevo_n
-                        conn.update(worksheet="Fichajes_Diarios", data=df_f_all)
                     st.cache_data.clear()
                     st.rerun()
     else:
         with st.form("nuevo_p"):
-            n = st.text_input("Nombre")
+            n = st.text_input("Nombre del Rodaje")
             f = st.date_input("Día 1", datetime.now())
             c1, c2 = st.columns(2)
             h_dia = c1.number_input("Horas día", value=9)
