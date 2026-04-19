@@ -14,7 +14,7 @@ def calcular_duracion(h_ini, h_fin):
     inicio = datetime.combine(hoy, h_ini)
     fin = datetime.combine(hoy, h_fin)
     if fin <= inicio: fin += timedelta(days=1)
-    return round((fin - inicio).total_seconds() / 3600, 2)
+    return round((fin - inicio).total_seconds() / 3600, 1) # Redondeado a 1 decimal
 
 # --- SINCRONIZACIÓN DE HORAS ---
 if 'hora_wrap' not in st.session_state: st.session_state.hora_wrap = time(19, 0)
@@ -34,12 +34,10 @@ with st.sidebar:
         df_p_all = conn.read(worksheet="Config_Proyectos", ttl=1)
         df_p_user = df_p_all[df_p_all['ID_Usuario'] == user_id] if not df_p_all.empty else pd.DataFrame()
         
-        # --- LÓGICA DE EXPORTACIÓN RECUPERADA Y MEJORADA ---
         df_f_all = conn.read(worksheet="Fichajes_Diarios", ttl=1)
         df_f_user = df_f_all[df_f_all['ID_Usuario'] == user_id] if not df_f_all.empty else pd.DataFrame()
         
         if not df_f_user.empty and not df_p_user.empty:
-            # Añadimos la columna de semana al CSV
             df_export = df_f_user.copy()
             df_export['Fecha'] = pd.to_datetime(df_export['Fecha'])
             f_ini_p = pd.to_datetime(df_p_user.iloc[0]['Fecha_Inicio'])
@@ -52,7 +50,7 @@ with st.sidebar:
             df_export = df_export.sort_values("Fecha")
             
             csv = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
-            st.download_button("📥 Descargar CSV (con Semanas)", data=csv, file_name=f"historial_{user_id}.csv", mime="text/csv")
+            st.download_button("📥 Descargar CSV", data=csv, file_name=f"historial_{user_id}.csv", mime="text/csv")
     except:
         df_p_user = pd.DataFrame()
         df_f_user = pd.DataFrame()
@@ -72,7 +70,7 @@ if "Proyecto" in opcion_menu:
     else:
         with st.form("nuevo_p"):
             n = st.text_input("Nombre del Rodaje")
-            f = st.date_input("Día 1 (Hoy por defecto)", datetime.now(), format="DD/MM/YYYY")
+            f = st.date_input("Día 1", datetime.now(), format="DD/MM/YYYY")
             c1, c2 = st.columns(2)
             h_dia = c1.number_input("Horas jornada contrato", value=9)
             h_sem = c2.number_input("Horas semana contrato", value=45)
@@ -119,7 +117,6 @@ elif "Fichar Jornada" in opcion_menu:
             }])
             conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_f_all, nuevo], ignore_index=True))
             st.cache_data.clear()
-            st.success(f"Guardado: {h_totales}h")
             st.toast("✅ Registrado")
 
 # --- 3. HISTORIAL POR SEMANAS ---
@@ -134,16 +131,19 @@ elif "Mi Historial" in opcion_menu:
             return (math.floor(dias_dif / 7) + 1) if dias_dif >= 0 else math.floor(dias_dif / 7)
 
         df_f_user['Semana'] = df_f_user['Fecha'].apply(calc_semana)
-        st.metric("Total Proyecto", f"{df_f_user['Horas_Totales'].sum()} h")
+        st.metric("Total Proyecto", f"{round(df_f_user['Horas_Totales'].sum(), 1)} h")
         st.write("---")
 
         for sem in sorted(df_f_user['Semana'].unique(), reverse=True):
             df_sem = df_f_user[df_f_user['Semana'] == sem].sort_values("Fecha")
-            horas_sem = df_sem['Horas_Totales'].sum()
+            horas_sem = round(df_sem['Horas_Totales'].sum(), 1)
             titulo_sem = f"📂 Semana {sem}" if sem > 0 else f"📂 Pre-producción (S{sem})"
             with st.expander(f"{titulo_sem} — {horas_sem}h totales"):
                 df_print = df_sem.copy()
                 df_print['Día'] = df_print['Fecha'].dt.strftime('%d/%m/%Y')
+                # Limpieza visual de segundos en la tabla
+                for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
+                    df_print[col] = df_print[col].astype(str).str[:5]
                 st.table(df_print[["Día", "Tipo_Dia", "Hora_Inicio", "Corte_Camara", "Hora_Fin_Jornada", "Horas_Totales", "Incidencias"]])
         
         st.markdown("---")
@@ -152,9 +152,13 @@ elif "Mi Historial" in opcion_menu:
             fecha_sel = st.selectbox("Selecciona día:", df_f_user['Día_Str'].unique())
             datos_dia = df_f_user[df_f_user['Día_Str'] == fecha_sel].iloc[0]
             
+            # Limpieza de seguridad para evitar el error ValueError al editar
+            h_ini_clean = str(datos_dia['Hora_Inicio'])[:5]
+            h_fin_clean = str(datos_dia['Hora_Fin_Jornada'])[:5]
+
             col_ed1, col_ed2 = st.columns(2)
-            nueva_h_ini = col_ed1.time_input("Nueva Hora Inicio", datetime.strptime(datos_dia['Hora_Inicio'], "%H:%M").time())
-            nueva_h_fin = col_ed2.time_input("Nueva Hora Fin", datetime.strptime(datos_dia['Hora_Fin_Jornada'], "%H:%M").time())
+            nueva_h_ini = col_ed1.time_input("Nueva Hora Inicio", datetime.strptime(h_ini_clean, "%H:%M").time())
+            nueva_h_fin = col_ed2.time_input("Nueva Hora Fin", datetime.strptime(h_fin_clean, "%H:%M").time())
             nuevas_obs = st.text_area("Notas / Observaciones", value=datos_dia['Observaciones'])
             
             c_btn1, c_btn2 = st.columns(2)
@@ -165,7 +169,7 @@ elif "Mi Historial" in opcion_menu:
                 nueva_fila = pd.DataFrame([{
                     "ID_Usuario": user_id, "Proyecto": datos_dia['Proyecto'], "Fecha": f_dt,
                     "Tipo_Dia": datos_dia['Tipo_Dia'], "Hora_Inicio": str(nueva_h_ini)[:5], 
-                    "Corte_Camara": datos_dia['Corte_Camara'], "Hora_Fin_Jornada": str(nueva_h_fin)[:5], 
+                    "Corte_Camara": str(datos_dia['Corte_Camara'])[:5], "Hora_Fin_Jornada": str(nueva_h_fin)[:5], 
                     "Horas_Totales": h_totales_edit, "Incidencias": datos_dia['Incidencias'], "Observaciones": nuevas_obs
                 }])
                 conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_f_new, nueva_fila], ignore_index=True))
@@ -178,5 +182,3 @@ elif "Mi Historial" in opcion_menu:
                 conn.update(worksheet="Fichajes_Diarios", data=df_f_new)
                 st.cache_data.clear()
                 st.rerun()
-    else:
-        st.info("No hay datos que mostrar.")
