@@ -23,28 +23,30 @@ with st.sidebar:
     st.markdown("---")
     opcion_menu = st.selectbox("Navegación", ["🏗️ Configurar Proyecto", "📝 Fichar Jornada", "📅 Mi Historial"], index=1)
     st.markdown("---")
-    st.caption("Versión 1.6 - Formato HH:MM")
+    st.caption("Versión 1.7 - Formato HH:MM")
 
-# --- LÓGICA ---
+# --- LÓGICA: CONFIGURAR PROYECTO ---
 if "Configurar Proyecto" in opcion_menu:
     st.title("🏗️ Configuración")
     df_existente = conn.read(worksheet="Config_Proyectos", ttl=10)
+    
     with st.form("nuevo_proyecto"):
         nombre_p = st.text_input("Nombre del Proyecto")
         fecha_ini = st.date_input("Día 1 / S1", datetime.now(), format="DD/MM/YYYY")
-        if st.form_submit_button("🚀 Guardar"):
+        if st.form_submit_button("🚀 Guardar Proyecto"):
             nuevo_p = pd.DataFrame([{"ID_Usuario":"User1","Proyecto":nombre_p,"Fecha_Inicio":str(fecha_ini),"Estado":"Activo"}])
             conn.update(worksheet="Config_Proyectos", data=pd.concat([df_existente, nuevo_p], ignore_index=True))
-            st.success("Guardado")
+            st.success(f"Proyecto '{nombre_p}' guardado.")
             st.cache_data.clear()
 
+# --- LÓGICA: FICHAR JORNADA ---
 elif "Fichar Jornada" in opcion_menu:
     st.title("📝 Fichaje Diario")
     df_proyectos = conn.read(worksheet="Config_Proyectos", ttl=10)
     df_fichajes_existentes = conn.read(worksheet="Fichajes_Diarios", ttl=10)
     
     if df_proyectos.empty:
-        st.warning("Crea un proyecto primero.")
+        st.warning("⚠️ No hay proyectos configurados. Ve a la pestaña 'Configurar Proyecto'.")
     else:
         lista_p = df_proyectos["Proyecto"].dropna().unique().tolist()
         proyecto_sel = st.selectbox("🎬 Proyecto", lista_p)
@@ -78,17 +80,26 @@ elif "Fichar Jornada" in opcion_menu:
                 t_str = ", ".join(tipo_dia_lista)
                 alertas = [k for k, v in {"No comida":inc_com,"No 15m":inc_cor,"Turnaround":inc_tur,"Km":inc_kms,"Dietas":inc_die,"Otros":inc_otr}.items() if v]
                 
+                # Guardamos las horas como string HH:MM:SS (Streamlit las devuelve así)
                 nuevo = pd.DataFrame([{
-                    "ID_Usuario": "User1", "Proyecto": proyecto_sel, "Fecha": str(fecha),
-                    "Tipo_Dia": t_str, "Hora_Inicio": str(h_ini), "Corte_Camara": str(h_corte),
-                    "Hora_Fin_Jornada": str(h_fin), "Comida": "No" if inc_com else "Sí",
-                    "Incidencias": ", ".join(alertas), "Observaciones": obs
+                    "ID_Usuario": "User1", 
+                    "Proyecto": proyecto_sel, 
+                    "Fecha": str(fecha),
+                    "Tipo_Dia": t_str, 
+                    "Hora_Inicio": str(h_ini), 
+                    "Corte_Camara": str(h_corte),
+                    "Hora_Fin_Jornada": str(h_fin), 
+                    "Comida": "No" if inc_com else "Sí",
+                    "Incidencias": ", ".join(alertas), 
+                    "Observaciones": obs
                 }])
                 
                 conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_fichajes_existentes, nuevo], ignore_index=True))
-                st.success("¡Jornada guardada!")
+                st.success("¡Jornada guardada correctamente!")
+                st.cache_data.clear()
                 st.balloons()
 
+# --- LÓGICA: MI HISTORIAL ---
 elif "Mi Historial" in opcion_menu:
     st.title("📅 Historial")
     df_f = conn.read(worksheet="Fichajes_Diarios", ttl=10)
@@ -97,23 +108,38 @@ elif "Mi Historial" in opcion_menu:
     if not df_f.empty:
         df_f['Fecha'] = pd.to_datetime(df_f['Fecha'])
         
-        # --- LIMPIEZA DE HORAS (Quitar segundos) ---
+        # Limpiamos las horas para que no muestren segundos en las tablas
         for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
             if col in df_f.columns:
-                # Convertimos a string y cortamos los últimos 3 caracteres (:ss)
                 df_f[col] = df_f[col].astype(str).str[:5]
 
         for p in df_f['Proyecto'].unique():
             st.subheader(f"🎥 {p}")
             info = df_p[df_p['Proyecto'] == p]
+            
             if not info.empty:
                 start = pd.to_datetime(info['Fecha_Inicio'].iloc[0])
                 df_proy = df_f[df_f['Proyecto'] == p].copy()
+                
+                # Cálculo de semana
                 df_proy['Semana'] = df_proy['Fecha'].apply(lambda x: (math.floor((x-start).days/7)+1) if (x-start).days >=0 else (math.floor((x-start).days/7)))
                 
+                # Ordenar por semana descendente para ver lo último primero
                 for s in sorted(df_proy['Semana'].unique(), reverse=True):
-                    with st.expander(f"📂 Semana {s}" if s>0 else f"📂 Pre-prod (S{s})"):
+                    titulo_semana = f"📂 Semana {s}" if s > 0 else f"📂 Pre-prod (S{s})"
+                    with st.expander(titulo_semana):
                         d_s = df_proy[df_proy['Semana'] == s].sort_values("Fecha")
-                        d_s['F'] = d_s['Fecha'].dt.strftime('%d/%m/%Y')
-                        # Mostramos las columnas relevantes sin segundos
-                        st.table(d_s[["F", "Tipo_Dia", "Hora_Inicio", "Hora_Fin_Jornada", "Incidencias"]])
+                        d_s['Día'] = d_s['Fecha'].dt.strftime('%d/%m/%Y')
+                        
+                        # Tabla resumida
+                        columnas_visibles = ["Día", "Tipo_Dia", "Hora_Inicio", "Hora_Fin_Jornada", "Incidencias"]
+                        st.table(d_s[columnas_visibles])
+                        
+                        # Notas opcionales si existen
+                        if d_s['Observaciones'].dropna().str.strip().any():
+                            st.info("💡 **Notas de la semana:**")
+                            for idx, row in d_s.iterrows():
+                                if row['Observaciones']:
+                                    st.write(f"- *{row['Día']}*: {row['Observaciones']}")
+    else:
+        st.info("Todavía no hay fichajes registrados.")
