@@ -1,3 +1,4 @@
+
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
@@ -50,16 +51,25 @@ with st.sidebar:
             df_csv['Semana'] = df_csv['Fecha'].apply(lambda f: (math.floor((f - f_ini_p).days / 7) + 1))
             df_csv = df_csv.sort_values("Fecha")
             
-            cols_csv = ['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']
-            df_csv = df_csv[cols_csv]
+            # Formatear horas para quitar segundos
+            for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
+                df_csv[col] = df_csv[col].astype(str).str[:5]
+            
+            # Seleccionar y renombrar columnas para el CSV
+            df_csv = df_csv[['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']]
             df_csv['Fecha'] = df_csv['Fecha'].dt.strftime('%d/%m/%Y')
+            df_csv.columns = ['Semana', 'Fecha', 'Tipo', 'Call', 'Corte', 'Fin', 'Alertas', 'Notas']
 
+            # Generar CSV con alineación de columnas (rellenando con ; vacíos)
+            num_cols = len(df_csv.columns)
+            sep = ";" * (num_cols - 2) # Para que los datos fijos ocupen 2 columnas y el resto queden vacías
+            
             output = io.StringIO()
-            output.write(f"REPORTE DE JORNADAS - WrapTime Lite\n")
-            output.write(f"Proyecto;{p_info['Proyecto']}\n")
-            output.write(f"Usuario;{user_id}\n")
-            output.write(f"Contrato;{p_info['Horas_Contrato']}h día / {p_info['Horas_Semana']}h semana\n")
-            output.write(f"Exportado el;{datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
+            output.write(f"REPORTE DE JORNADAS - WrapTime Lite{';' * (num_cols-1)}\n")
+            output.write(f"Proyecto;{p_info['Proyecto']}{sep}\n")
+            output.write(f"Usuario;{user_id}{sep}\n")
+            output.write(f"Contrato;{p_info['Horas_Contrato']}h día / {p_info['Horas_Semana']}h semana{sep}\n")
+            output.write(f"Exportado el;{datetime.now().strftime('%d/%m/%Y %H:%M')}{sep}\n")
             output.write("\n")
             
             df_csv.to_csv(output, index=False, sep=';', lineterminator='\n', encoding='utf-8-sig')
@@ -158,23 +168,10 @@ elif "Mi Historial" in opcion_menu:
                 df_tab = df_sem.copy()
                 df_tab['Día'] = df_tab['Fecha'].dt.strftime('%d/%m/%Y')
                 for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
-                    df_tab[col] = df_tab[col].astype(str).apply(lambda x: re.sub(r':$', '', x[:5]))
+                    df_tab[col] = df_tab[col].astype(str).str[:5]
                 
-                # Renombrar columnas e incluir Observaciones
-                df_tab = df_tab.rename(columns={
-                    "Tipo_Dia": "Tipo", 
-                    "Hora_Inicio": "Call", 
-                    "Corte_Camara": "Corte", 
-                    "Hora_Fin_Jornada": "Fin", 
-                    "Horas_Totales": "Horas", 
-                    "Incidencias": "Alertas",
-                    "Observaciones": "Notas"
-                })
-                st.dataframe(
-                    df_tab[["Día", "Tipo", "Call", "Corte", "Fin", "Horas", "Alertas", "Notas"]], 
-                    hide_index=True, 
-                    use_container_width=True
-                )
+                df_tab = df_tab.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Corte_Camara": "Corte", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "Horas", "Incidencias": "Alertas", "Observaciones": "Notas"})
+                st.dataframe(df_tab[["Día", "Tipo", "Call", "Corte", "Fin", "Horas", "Alertas", "Notas"]], hide_index=True, use_container_width=True)
         
         st.markdown("---")
         with st.expander("✏️ Gestionar Jornadas"):
@@ -200,19 +197,13 @@ elif "Mi Historial" in opcion_menu:
                 v_15m = c_i2.checkbox("No 15m", value="No 15m" in incidencias_previa)
                 v_turn = c_i3.checkbox("Turnaround", value="Turnaround" in incidencias_previa)
                 v_dietas = c_i4.checkbox("Dietas", value="Dietas" in incidencias_previa)
-                
                 n_obs = st.text_area("Observaciones", value=str(datos['Observaciones']))
                 
                 if st.form_submit_button("💾 Guardar Cambios"):
                     f_dt = datetime.strptime(f_sel, '%d/%m/%Y').strftime('%Y-%m-%d')
                     df_new = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == f_dt))]
                     h_ed = calcular_duracion(n_ini, n_fin)
-                    
-                    alertas_n = []
-                    if v_comida: alertas_n.append("No comida")
-                    if v_15m: alertas_n.append("No 15m")
-                    if v_turn: alertas_n.append("Turnaround")
-                    if v_dietas: alertas_n.append("Dietas")
+                    alertas_n = [k for k, v in {"No comida":v_comida, "No 15m":v_15m, "Turnaround":v_turn, "Dietas":v_dietas}.items() if v]
                     
                     nueva = pd.DataFrame([{
                         "ID_Usuario": user_id, "Proyecto": datos['Proyecto'], "Fecha": f_dt,
@@ -222,5 +213,4 @@ elif "Mi Historial" in opcion_menu:
                     }])
                     conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_new, nueva], ignore_index=True))
                     st.cache_data.clear()
-                    st.success("Jornada actualizada")
                     st.rerun()
