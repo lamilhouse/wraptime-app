@@ -58,7 +58,7 @@ with st.sidebar:
             st.download_button("📥 Descargar Reporte CSV", data=output.getvalue().encode('utf-8-sig'), file_name=f"reporte_{user_id}.csv", mime="text/csv")
     except: pass
 
-# --- 1. PROYECTO (EDICIÓN RESTAURADA) ---
+# --- 1. PROYECTO ---
 if "Proyecto" in opcion_menu:
     st.title("🏗️ Configuración")
     if not df_p_user.empty:
@@ -112,7 +112,7 @@ elif "Fichar Jornada" in opcion_menu:
             st.cache_data.clear()
             st.rerun()
 
-# --- 3. HISTORIAL (RESUMEN Y EDICIÓN RESTAURADOS) ---
+# --- 3. HISTORIAL (CON EDICIÓN Y BORRADO POR JORNADA) ---
 elif "Mi Historial" in opcion_menu:
     st.title("📅 Mi Historial")
     if not df_f_user.empty and not df_p_user.empty:
@@ -131,9 +131,32 @@ elif "Mi Historial" in opcion_menu:
                 df_tab = df_sem.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
                 st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
                 
-                # BOTÓN ELIMINAR/EDITAR (BÁSICO)
-                if st.button(f"🗑️ Limpiar Semana {sem}", key=f"del_{sem}"):
-                    df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'].isin(df_sem['Fecha'].astype(str))))]
+                # SECCIÓN EDITAR / BORRAR JORNADA
+                col_ed1, col_ed2 = st.columns([2, 1])
+                jornada_sel = col_ed1.selectbox("Seleccionar día para gestionar:", df_sem['Día_Vis'], key=f"sel_{sem}")
+                
+                if col_ed2.button("🗑️ Borrar", key=f"btn_del_{sem}"):
+                    fecha_borrar = df_sem[df_sem['Día_Vis'] == jornada_sel]['Fecha'].values[0]
+                    df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == str(fecha_borrar)))]
                     conn.update(worksheet="Fichajes_Diarios", data=df_f_rest)
                     st.cache_data.clear()
                     st.rerun()
+                
+                with st.popover("✏️ Editar Jornada"):
+                    row = df_sem[df_sem['Día_Vis'] == jornada_sel].iloc[0]
+                    with st.form(f"form_ed_{jornada_sel}"):
+                        new_h_ini = st.time_input("Nuevo Call", datetime.strptime(row['Hora_Inicio'], "%H:%M").time())
+                        new_h_fin = st.time_input("Nuevo Fin", datetime.strptime(row['Hora_Fin_Jornada'], "%H:%M").time())
+                        new_obs = st.text_area("Notas", value=row['Observaciones'])
+                        if st.form_submit_button("Guardar Cambios"):
+                            df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == str(row['Fecha'])))]
+                            new_h_tot = calcular_duracion(new_h_ini, new_h_fin)
+                            editado = pd.DataFrame([{
+                                "ID_Usuario": user_id, "Proyecto": row['Proyecto'], "Fecha": row['Fecha'],
+                                "Tipo_Dia": row['Tipo_Dia'], "Hora_Inicio": new_h_ini.strftime("%H:%M"), "Corte_Camara": row['Corte_Camara'],
+                                "Hora_Fin_Jornada": new_h_fin.strftime("%H:%M"), "Horas_Totales": new_h_tot, 
+                                "Incidencias": row['Incidencias'], "Observaciones": new_obs
+                            }])
+                            conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_f_rest, editado], ignore_index=True))
+                            st.cache_data.clear()
+                            st.rerun()
