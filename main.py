@@ -132,7 +132,7 @@ elif "Mi Historial" in opcion_menu:
                 df_tab = df_sem.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
                 st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
                 
-                # Gestión individual por jornada
+                # Gestión individual por jornada (SIN BOTÓN DE SEMANA)
                 col_ed1, col_ed2 = st.columns([2, 1])
                 jornada_sel = col_ed1.selectbox("Seleccionar día para gestionar:", df_sem['Día_Vis'], key=f"sel_{sem}")
                 
@@ -165,7 +165,7 @@ elif "Mi Historial" in opcion_menu:
                             editado = pd.DataFrame([{
                                 "ID_Usuario": user_id, "Proyecto": row['Proyecto'], "Fecha": row['Fecha'],
                                 "Tipo_Dia": new_tag, "Hora_Inicio": new_h_ini.strftime("%H:%M"), "Corte_Camara": row['Corte_Camara'],
-                                "Hora_Fin_Jornada": h_fin.strftime("%H:%M"), "Horas_Totales": new_h_tot, 
+                                "Hora_Fin_Jornada": new_h_fin.strftime("%H:%M"), "Horas_Totales": new_h_tot, 
                                 "Incidencias": ", ".join(new_inc), "Observaciones": new_obs
                             }])
                             conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_f_rest, editado], ignore_index=True))
