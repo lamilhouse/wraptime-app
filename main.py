@@ -148,16 +148,22 @@ elif "Mi Historial" in opcion_menu:
                         new_tag = st.selectbox("Tipo", ["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"], index=["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"].index(row['Tipo_Dia']))
                         new_h_ini = st.time_input("Nuevo Call", datetime.strptime(row['Hora_Inicio'], "%H:%M").time())
                         new_h_fin = st.time_input("Nuevo Fin", datetime.strptime(row['Hora_Fin_Jornada'], "%H:%M").time())
-                        inc_actuales = row['Incidencias'].split(", ")
+                        
+                        # --- ARREGLO DE ERROR: Manejo de nulos en Incidencias ---
+                        val_inc = str(row['Incidencias']) if pd.notna(row['Incidencias']) else ""
+                        inc_actuales = val_inc.split(", ") if val_inc else []
+                        
                         ed_com = st.checkbox("No comida", value="No comida" in inc_actuales)
-                        ed_15 = st.checkbox("No 15m", value="No 15m" in inc_actuales)
+                        ed_15 = st.checkbox("No 15 min", value="No 15 min" in inc_actuales or "No 15m" in inc_actuales)
                         ed_turn = st.checkbox("Turnaround", value="Turnaround" in inc_actuales)
                         ed_diet = st.checkbox("Dietas", value="Dietas" in inc_actuales)
-                        new_obs = st.text_area("Notas", value=row['Observaciones'])
+                        
+                        new_obs = st.text_area("Notas", value=row['Observaciones'] if pd.notna(row['Observaciones']) else "")
+                        
                         if st.form_submit_button("Guardar Cambios"):
                             df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == str(row['Fecha'])))]
                             new_h_tot = calcular_duracion(new_h_ini, new_h_fin)
-                            new_inc = [k for k, v in {"No comida":ed_com, "No 15m":ed_15, "Turnaround":ed_turn, "Dietas":ed_diet}.items() if v]
+                            new_inc = [k for k, v in {"No comida":ed_com, "No 15 min":ed_15, "Turnaround":ed_turn, "Dietas":ed_diet}.items() if v]
                             editado = pd.DataFrame([{
                                 "ID_Usuario": user_id, "Proyecto": row['Proyecto'], "Fecha": row['Fecha'],
                                 "Tipo_Dia": new_tag, "Hora_Inicio": new_h_ini.strftime("%H:%M"), "Corte_Camara": row['Corte_Camara'],
