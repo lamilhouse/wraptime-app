@@ -102,7 +102,7 @@ elif "Fichar Jornada" in opcion_menu:
         
         if st.button("💾 Guardar Jornada"):
             h_tot = calcular_duracion(h_ini, h_fin)
-            inc = [k for k, v in {"No comida":i_com, "No 15m":i_15, "Turnaround":i_turn, "Dietas":i_diet}.items() if v]
+            inc = [k for k, v in {"No comida":i_com, "No 15 min":i_15, "Turnaround":i_turn, "Dietas":i_diet}.items() if v]
             nuevo = pd.DataFrame([{
                 "ID_Usuario": user_id, "Proyecto": df_p_user.iloc[0]['Proyecto'], "Fecha": str(fecha),
                 "Tipo_Dia": tags, "Hora_Inicio": h_ini.strftime("%H:%M"), "Corte_Camara": h_wrap.strftime("%H:%M"),
@@ -132,6 +132,7 @@ elif "Mi Historial" in opcion_menu:
                 df_tab = df_sem.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
                 st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
                 
+                # Gestión individual por jornada (Seleccionar, Borrar o Editar)
                 col_ed1, col_ed2 = st.columns([2, 1])
                 jornada_sel = col_ed1.selectbox("Seleccionar día:", df_sem['Día_Vis'], key=f"sel_{sem}")
                 
@@ -149,15 +150,12 @@ elif "Mi Historial" in opcion_menu:
                         new_h_ini = st.time_input("Nuevo Call", datetime.strptime(row['Hora_Inicio'], "%H:%M").time())
                         new_h_fin = st.time_input("Nuevo Fin", datetime.strptime(row['Hora_Fin_Jornada'], "%H:%M").time())
                         
-                        # --- ARREGLO DE ERROR: Manejo de nulos en Incidencias ---
                         val_inc = str(row['Incidencias']) if pd.notna(row['Incidencias']) else ""
                         inc_actuales = val_inc.split(", ") if val_inc else []
-                        
                         ed_com = st.checkbox("No comida", value="No comida" in inc_actuales)
-                        ed_15 = st.checkbox("No 15 min", value="No 15 min" in inc_actuales or "No 15m" in inc_actuales)
+                        ed_15 = st.checkbox("No 15 min", value=("No 15 min" in inc_actuales or "No 15m" in inc_actuales))
                         ed_turn = st.checkbox("Turnaround", value="Turnaround" in inc_actuales)
                         ed_diet = st.checkbox("Dietas", value="Dietas" in inc_actuales)
-                        
                         new_obs = st.text_area("Notas", value=row['Observaciones'] if pd.notna(row['Observaciones']) else "")
                         
                         if st.form_submit_button("Guardar Cambios"):
