@@ -23,6 +23,7 @@ def obtener_semana_prod(fecha_fichaje, fecha_inicio_rodaje):
 
 def format_hhmm(val):
     s = str(val).strip()
+    if not s or s.lower() == 'none': return ""
     return s[:5] if len(s) >= 5 else s
 
 def actualizar_fin():
@@ -67,19 +68,6 @@ if "Proyecto" in opcion_menu:
             st.subheader(f"🎥 {p['Proyecto']}")
             st.write(f"⏱️ **Contrato:** {p['Horas_Contrato']}h día / {p['Horas_Semana']}h semana")
             st.info(f"📅 **Día 1 de rodaje:** {pd.to_datetime(p['Fecha_Inicio']).strftime('%d/%m/%Y')}")
-
-        with st.expander("✏️ Editar Datos del Proyecto"):
-            with st.form("edit_p"):
-                nuevo_n = st.text_input("Nombre", value=p['Proyecto'])
-                nueva_f = st.date_input("Inicio", pd.to_datetime(p['Fecha_Inicio']), format="DD/MM/YYYY")
-                h_dia = st.number_input("Horas/Día", value=int(p['Horas_Contrato']))
-                h_sem = st.number_input("Horas/Semana", value=int(p['Horas_Semana']))
-                if st.form_submit_button("Actualizar Proyecto"):
-                    df_p_new = df_p_all[df_p_all['ID_Usuario'].str.lower() != user_id]
-                    editado = pd.DataFrame([{"ID_Usuario": user_id, "Proyecto": nuevo_n, "Fecha_Inicio": str(nueva_f), "Horas_Contrato": h_dia, "Horas_Semana": h_sem, "Estado": "Activo"}])
-                    conn.update(worksheet="Config_Proyectos", data=pd.concat([df_p_new, editado], ignore_index=True))
-                    st.cache_data.clear()
-                    st.rerun()
 
 # --- 2. FICHAR ---
 elif "Fichar Jornada" in opcion_menu:
@@ -129,19 +117,13 @@ elif "Mi Historial" in opcion_menu:
             
             lbl = f"Semana {sem}" if sem > 0 else f"Pre-producción (S{sem})"
             with st.expander(f"📂 {lbl} — Total: {round(df_sem['Horas_Totales'].sum(), 1)}h"):
-                df_tab = df_sem.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
+                # Mostrar tabla limpia sin Nones
+                df_tab = df_sem.copy().fillna("")
+                df_tab = df_tab.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
                 st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
                 
-                # Gestión individual por jornada (SIN BOTÓN DE SEMANA)
-                col_ed1, col_ed2 = st.columns([2, 1])
-                jornada_sel = col_ed1.selectbox("Seleccionar día para gestionar:", df_sem['Día_Vis'], key=f"sel_{sem}")
-                
-                if col_ed2.button("🗑️ Borrar", key=f"btn_del_{sem}"):
-                    fecha_borrar = df_sem[df_sem['Día_Vis'] == jornada_sel]['Fecha'].values[0]
-                    df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == str(fecha_borrar)))]
-                    conn.update(worksheet="Fichajes_Diarios", data=df_f_rest)
-                    st.cache_data.clear()
-                    st.rerun()
+                # Gestión individual (SOLO SELECTOR Y EDITAR)
+                jornada_sel = st.selectbox("Seleccionar día para editar:", df_sem['Día_Vis'], key=f"sel_{sem}")
                 
                 with st.popover("✏️ Editar Jornada"):
                     row = df_sem[df_sem['Día_Vis'] == jornada_sel].iloc[0]
