@@ -118,10 +118,18 @@ elif "Mi Historial" in opcion_menu:
             lbl = f"Semana {sem}" if sem > 0 else f"Pre-producción (S{sem})"
             with st.expander(f"📂 {lbl} — Total: {round(df_sem['Horas_Totales'].sum(), 1)}h"):
                 df_tab = df_sem.copy().fillna("")
-                df_tab = df_tab.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
-                st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
+                # AQUÍ SE RELEJA EL CORTE Y EL FIN
+                df_tab = df_tab.rename(columns={
+                    "Tipo_Dia": "Tipo", 
+                    "Hora_Inicio": "Call", 
+                    "Corte_Camara": "Corte", 
+                    "Hora_Fin_Jornada": "Fin", 
+                    "Horas_Totales": "H", 
+                    "Incidencias": "Alertas", 
+                    "Observaciones": "Notas"
+                })
+                st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Corte", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
                 
-                # GESTIÓN DENTRO DEL POPOVER
                 with st.popover("⚙️ Gestionar Jornadas"):
                     jornada_sel = st.selectbox("Selecciona día:", df_sem['Día_Vis'], key=f"sel_{sem}")
                     row = df_sem[df_sem['Día_Vis'] == jornada_sel].iloc[0]
@@ -132,6 +140,7 @@ elif "Mi Historial" in opcion_menu:
                         st.write(f"Editando: **{jornada_sel}**")
                         new_tag = st.selectbox("Tipo", ["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"], index=["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"].index(row['Tipo_Dia']))
                         new_h_ini = st.time_input("Nuevo Call", datetime.strptime(row['Hora_Inicio'], "%H:%M").time())
+                        new_h_corte = st.time_input("Nuevo Corte", datetime.strptime(row['Corte_Camara'], "%H:%M").time() if row['Corte_Camara'] else time(18,0))
                         new_h_fin = st.time_input("Nuevo Fin", datetime.strptime(row['Hora_Fin_Jornada'], "%H:%M").time())
                         
                         val_inc = str(row['Incidencias']) if pd.notna(row['Incidencias']) else ""
@@ -149,7 +158,7 @@ elif "Mi Historial" in opcion_menu:
                             new_inc = [k for k, v in {"No comida":ed_com, "No 15 min":ed_15, "Turnaround":ed_turn, "Dietas":ed_diet}.items() if v]
                             editado = pd.DataFrame([{
                                 "ID_Usuario": user_id, "Proyecto": row['Proyecto'], "Fecha": row['Fecha'],
-                                "Tipo_Dia": new_tag, "Hora_Inicio": new_h_ini.strftime("%H:%M"), "Corte_Camara": row['Corte_Camara'],
+                                "Tipo_Dia": new_tag, "Hora_Inicio": new_h_ini.strftime("%H:%M"), "Corte_Camara": new_h_corte.strftime("%H:%M"),
                                 "Hora_Fin_Jornada": new_h_fin.strftime("%H:%M"), "Horas_Totales": new_h_tot, 
                                 "Incidencias": ", ".join(new_inc), "Observaciones": new_obs
                             }])
