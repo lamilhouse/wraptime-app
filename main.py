@@ -24,7 +24,6 @@ def obtener_semana_prod(fecha_fichaje, fecha_inicio_rodaje):
 
 # --- FUNCIÓN: FORMATEO HH:MM UNIFICADO ---
 def format_hhmm(val):
-    # Elimina cualquier residuo de segundos o puntos
     s = str(val).strip()
     if len(s) >= 5: return s[:5]
     return s
@@ -40,14 +39,13 @@ with st.sidebar:
     opcion_menu = st.selectbox("Menú", ["🏗️ Proyecto", "📝 Fichar Jornada", "📅 Mi Historial"], index=1)
     
     try:
-        # Carga de datos base
         df_p_all = conn.read(worksheet="Config_Proyectos", ttl="0s")
         df_p_user = df_p_all[df_p_all['ID_Usuario'].str.lower() == user_id] if not df_p_all.empty else pd.DataFrame()
         
         df_f_all = conn.read(worksheet="Fichajes_Diarios", ttl="0s")
         df_f_user = df_f_all[df_f_all['ID_Usuario'].str.lower() == user_id] if not df_f_all.empty else pd.DataFrame()
         
-        # EXPORTACIÓN CSV (Sincronizada)
+        # EXPORTACIÓN CSV
         if not df_f_user.empty and not df_p_user.empty:
             p_info = df_p_user.iloc[0]
             f_ini_p = pd.to_datetime(p_info['Fecha_Inicio']).date()
@@ -57,11 +55,14 @@ with st.sidebar:
             df_csv['Semana'] = df_csv['Fecha_DT'].apply(lambda x: obtener_semana_prod(x, f_ini_p))
             df_csv = df_csv.sort_values("Fecha_DT")
             
-            # Formateo HH:MM para CSV
+            # --- CORRECCIÓN FORMATO FECHA (Día/Mes/Año) ---
+            df_csv['Fecha_Export'] = pd.to_datetime(df_csv['Fecha']).dt.strftime('%d/%m/%Y')
+            
+            # Formateo HH:MM
             for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                 df_csv[col] = df_csv[col].apply(format_hhmm)
             
-            df_export = df_csv[['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']].copy()
+            df_export = df_csv[['Semana', 'Fecha_Export', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']].copy()
             df_export.columns = ['Semana', 'Fecha', 'Tipo', 'Call', 'Corte', 'Fin', 'Alertas', 'Notas']
 
             output = io.StringIO()
@@ -81,7 +82,7 @@ if "Proyecto" in opcion_menu:
 # --- 2. FICHAR ---
 elif "Fichar Jornada" in opcion_menu:
     st.title("📝 Fichaje")
-    if df_p_user.empty: st.warning("Configura tu proyecto primero.")
+    if df_p_user.empty: st.warning("Configura tu proyecto.")
     else:
         fecha = st.date_input("📅 Fecha", datetime.now())
         c1, c2, c3 = st.columns(3)
@@ -89,9 +90,8 @@ elif "Fichar Jornada" in opcion_menu:
         h_wrap = c2.time_input("🎥 Wrap", key="hora_wrap", on_change=actualizar_fin)
         h_fin = c3.time_input("🚚 Fin", key="hora_fin")
         
-        if st.button("💾 Guardar Jornada"):
+        if st.button("💾 Guardar"):
             h_tot = calcular_duracion(h_ini, h_fin)
-            # Guardamos siempre en formato HH:MM limpio
             nuevo = pd.DataFrame([{
                 "ID_Usuario": user_id, 
                 "Proyecto": df_p_user.iloc[0]['Proyecto'], 
@@ -118,11 +118,13 @@ elif "Mi Historial" in opcion_menu:
         for sem in sorted(df_f_user['Semana'].unique(), reverse=True):
             df_sem = df_f_user[df_f_user['Semana'] == sem].sort_values("Fecha_DT").copy()
             
-            # Limpiar formatos para la tabla visual
+            # --- FORMATO FECHA EN APP (Día/Mes/Año) ---
+            df_sem['Día_Vis'] = pd.to_datetime(df_sem['Fecha']).dt.strftime('%d/%m/%Y')
+            
             for c in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                 df_sem[c] = df_sem[c].apply(format_hhmm)
             
             lbl = f"Semana {sem}" if sem > 0 else f"Pre-producción (S{sem})"
             with st.expander(f"📂 {lbl} — {round(df_sem['Horas_Totales'].sum(), 1)}h"):
-                df_tab = df_sem.rename(columns={"Fecha": "Día", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H"})
-                st.dataframe(df_tab[["Día", "Call", "Fin", "H"]], hide_index=True)
+                df_tab = df_sem.rename(columns={"Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H"})
+                st.dataframe(df_tab[["Día_Vis", "Call", "Fin", "H"]], hide_index=True)
