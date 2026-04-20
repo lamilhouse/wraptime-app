@@ -20,14 +20,12 @@ def calcular_duracion(h_ini, h_fin):
 def actualizar_fin():
     st.session_state.hora_fin = st.session_state.hora_wrap
 
-# --- FUNCIÓN CRÍTICA: CÁLCULO DE SEMANAS (IGUAL QUE EN APP) ---
-def calcular_semana_produccion(fecha_fichaje, fecha_inicio_rodaje):
+# --- LÓGICA DE SEMANAS (UNIFICADA) ---
+def obtener_semana_prod(fecha_fichaje, fecha_inicio_rodaje):
     delta_days = (fecha_fichaje - fecha_inicio_rodaje).days
     if delta_days >= 0:
-        # Semana 1, 2, 3...
         return (delta_days // 7) + 1
     else:
-        # Semana -1, -2, -3...
         return (delta_days // 7)
 
 # --- MENÚ LATERAL ---
@@ -48,20 +46,16 @@ with st.sidebar:
             p_info = df_p_user.iloc[0]
             f_ini_p = pd.to_datetime(p_info['Fecha_Inicio']).date()
             
-            # PREPARAR TABLA PARA CSV
+            # EXPORTACIÓN CSV
             df_csv = df_f_user.copy()
             df_csv['Fecha_DT'] = pd.to_datetime(df_csv['Fecha']).dt.date
-            
-            # Aplicar la lógica corregida de semanas
-            df_csv['Semana'] = df_csv['Fecha_DT'].apply(lambda x: calcular_semana_produccion(x, f_ini_p))
-            
+            df_csv['Semana'] = df_csv['Fecha_DT'].apply(lambda x: obtener_semana_prod(x, f_ini_p))
             df_csv = df_csv.sort_values("Fecha_DT")
             
-            # Limpieza de horas (Sin ":" al final)
+            # Limpieza estricta de horas para CSV (HH:MM)
             for col in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
                 df_csv[col] = df_csv[col].astype(str).str.strip().str[:5]
             
-            # Selección final de columnas (Semana es la A)
             df_export = df_csv[['Semana', 'Fecha', 'Tipo_Dia', 'Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada', 'Incidencias', 'Observaciones']].copy()
             df_export.columns = ['Semana', 'Fecha', 'Tipo', 'Call', 'Corte', 'Fin', 'Alertas', 'Notas']
 
@@ -69,9 +63,9 @@ with st.sidebar:
             df_export.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
             
             st.download_button(
-                label="📥 Descargar Reporte Corregido",
+                label="📥 Descargar Reporte CSV",
                 data=output.getvalue().encode('utf-8-sig'),
-                file_name=f"reporte_{user_id}_FINAL.csv",
+                file_name=f"reporte_{user_id}.csv",
                 mime="text/csv"
             )
     except:
@@ -106,18 +100,28 @@ elif "Fichar Jornada" in opcion_menu:
             }])
             conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_f_all, nuevo], ignore_index=True))
             st.cache_data.clear()
+            st.success("¡Guardado!")
             st.rerun()
 
-# --- 3. HISTORIAL ---
+# --- 3. HISTORIAL (REPARADO SIN SEGUNDOS) ---
 elif "Mi Historial" in opcion_menu:
     st.title("📅 Mi Historial")
     if not df_f_user.empty and not df_p_user.empty:
         df_f_user['Fecha_DT'] = pd.to_datetime(df_f_user['Fecha']).dt.date
         f_ini = pd.to_datetime(df_p_user.iloc[0]['Fecha_Inicio']).date()
-        df_f_user['Semana'] = df_f_user['Fecha_DT'].apply(lambda x: calcular_semana_produccion(x, f_ini))
+        df_f_user['Semana'] = df_f_user['Fecha_DT'].apply(lambda x: obtener_semana_prod(x, f_ini))
         
         for sem in sorted(df_f_user['Semana'].unique(), reverse=True):
-            df_sem = df_f_user[df_f_user['Semana'] == sem].sort_values("Fecha_DT")
+            df_sem = df_f_user[df_f_user['Semana'] == sem].sort_values("Fecha_DT").copy()
+            
+            # Limpiar segundos para la visualización en la app
+            for c in ['Hora_Inicio', 'Corte_Camara', 'Hora_Fin_Jornada']:
+                df_sem[c] = df_sem[c].astype(str).str.strip().str[:5]
+            
             txt = f"Semana {sem}" if sem > 0 else f"Pre-producción (S{sem})"
-            with st.expander(f"📂 {txt}"):
-                st.dataframe(df_sem[["Fecha", "Hora_Inicio", "Hora_Fin_Jornada", "Horas_Totales"]], hide_index=True)
+            with st.expander(f"📂 {txt} — Total: {round(df_sem['Horas_Totales'].sum(), 1)}h"):
+                df_visual = df_sem.rename(columns={
+                    "Fecha": "Día", "Hora_Inicio": "Call", 
+                    "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H"
+                })
+                st.dataframe(df_visual[["Día", "Call", "Fin", "H"]], hide_index=True)
