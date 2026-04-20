@@ -117,17 +117,19 @@ elif "Mi Historial" in opcion_menu:
             
             lbl = f"Semana {sem}" if sem > 0 else f"Pre-producción (S{sem})"
             with st.expander(f"📂 {lbl} — Total: {round(df_sem['Horas_Totales'].sum(), 1)}h"):
-                # Mostrar tabla limpia sin Nones
                 df_tab = df_sem.copy().fillna("")
                 df_tab = df_tab.rename(columns={"Tipo_Dia": "Tipo", "Hora_Inicio": "Call", "Hora_Fin_Jornada": "Fin", "Horas_Totales": "H", "Incidencias": "Alertas", "Observaciones": "Notas"})
                 st.dataframe(df_tab[["Día_Vis", "Tipo", "Call", "Fin", "H", "Alertas", "Notas"]], hide_index=True)
                 
-                # Gestión individual (SOLO SELECTOR Y EDITAR)
-                jornada_sel = st.selectbox("Seleccionar día para editar:", df_sem['Día_Vis'], key=f"sel_{sem}")
-                
-                with st.popover("✏️ Editar Jornada"):
+                # GESTIÓN DENTRO DEL POPOVER
+                with st.popover("⚙️ Gestionar Jornadas"):
+                    jornada_sel = st.selectbox("Selecciona día:", df_sem['Día_Vis'], key=f"sel_{sem}")
                     row = df_sem[df_sem['Día_Vis'] == jornada_sel].iloc[0]
+                    
+                    st.divider()
+                    
                     with st.form(f"form_ed_{jornada_sel}"):
+                        st.write(f"Editando: **{jornada_sel}**")
                         new_tag = st.selectbox("Tipo", ["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"], index=["Normal", "Viaje", "Pruebas", "Carga", "Oficina", "Localización", "Chequeo"].index(row['Tipo_Dia']))
                         new_h_ini = st.time_input("Nuevo Call", datetime.strptime(row['Hora_Inicio'], "%H:%M").time())
                         new_h_fin = st.time_input("Nuevo Fin", datetime.strptime(row['Hora_Fin_Jornada'], "%H:%M").time())
@@ -140,7 +142,8 @@ elif "Mi Historial" in opcion_menu:
                         ed_diet = st.checkbox("Dietas", value="Dietas" in inc_actuales)
                         new_obs = st.text_area("Notas", value=row['Observaciones'] if pd.notna(row['Observaciones']) else "")
                         
-                        if st.form_submit_button("Guardar Cambios"):
+                        c_f1, c_f2 = st.columns(2)
+                        if c_f1.form_submit_button("💾 Guardar"):
                             df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == str(row['Fecha'])))]
                             new_h_tot = calcular_duracion(new_h_ini, new_h_fin)
                             new_inc = [k for k, v in {"No comida":ed_com, "No 15 min":ed_15, "Turnaround":ed_turn, "Dietas":ed_diet}.items() if v]
@@ -151,5 +154,11 @@ elif "Mi Historial" in opcion_menu:
                                 "Incidencias": ", ".join(new_inc), "Observaciones": new_obs
                             }])
                             conn.update(worksheet="Fichajes_Diarios", data=pd.concat([df_f_rest, editado], ignore_index=True))
+                            st.cache_data.clear()
+                            st.rerun()
+                        
+                        if c_f2.form_submit_button("🗑️ Borrar Día"):
+                            df_f_rest = df_f_all[~((df_f_all['ID_Usuario'].str.lower() == user_id) & (df_f_all['Fecha'] == str(row['Fecha'])))]
+                            conn.update(worksheet="Fichajes_Diarios", data=df_f_rest)
                             st.cache_data.clear()
                             st.rerun()
